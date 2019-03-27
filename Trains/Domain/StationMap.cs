@@ -115,20 +115,11 @@ namespace Trains.Domain
         /// <returns></returns>
         public int NumberOfTripsWithStopLimit(string startStationName, string endStationName, int minDeep, int maxDeep)
         {
-            Func<QueueNode, int, Tuple<bool, int>> validateFunction = (qNode, cal) =>
+            Tuple<bool, int> validateFunction(QueueNode qNode, int cal)
             {
-                var isBreak = false;
-                var calResult = cal;
-                if (calResult < 0)
-                {
-                    //针对累计校验值外部统一处理，因为不同场景校验值初始值不同
-                    calResult = 0;
-                }
-                if (qNode.Level > maxDeep)
-                {
-                    //站台书超过限额，直接跳出
-                    isBreak = true;
-                }
+                var calResult = GetCalResult(cal, 0);
+                var isBreak = IsBreak(qNode.Level, maxDeep);
+
                 if (!isBreak && endStationName.Equals(qNode.Station.Name) && qNode.Level >= minDeep)
                 {
                     //最小值交换
@@ -136,7 +127,7 @@ namespace Trains.Domain
                 }
 
                 return new Tuple<bool, int>(isBreak, calResult);
-            };
+            }
 
             return BFS(startStationName, endStationName, validateFunction);
         }
@@ -149,20 +140,11 @@ namespace Trains.Domain
         /// <returns>length</returns>
         public int LengthOfShortestRoute(string startStationName, string endStationName)
         {
-            Func<QueueNode, int, Tuple<bool, int>> validateFunction = (qNode, cal) =>
+            Tuple<bool, int> validateFunction(QueueNode qNode, int cal)
             {
-                var isBreak = false;
-                var calResult = cal;
-                if (calResult < 0)
-                {
-                    //针对累计校验值外部统一处理，因为不同场景校验值初始值不同
-                    calResult = int.MaxValue;
-                }
-                if (qNode.TotalDistance > calResult)
-                {
-                    //大于最小距离，直接跳出
-                    isBreak = true;
-                }
+                var calResult = GetCalResult(cal, int.MaxValue);
+                var isBreak = IsBreak(qNode.TotalDistance, calResult);
+
                 if (!isBreak && endStationName.Equals(qNode.Station.Name))
                 {
                     //最小值交换
@@ -171,7 +153,7 @@ namespace Trains.Domain
                 }
 
                 return new Tuple<bool, int>(isBreak, calResult);
-            };
+            }
 
             return BFS(startStationName, endStationName, validateFunction);
         }
@@ -185,21 +167,11 @@ namespace Trains.Domain
         /// <returns></returns>
         public int NumberOfRouteWithDistanceLimit(string startStationName, string endStationName, int limitDistance)
         {
-            Func<QueueNode, int, Tuple<bool, int>> validateFunction = (qNode, cal) =>
+            Tuple<bool, int> validateFunction(QueueNode qNode, int cal)
             {
-                var isBreak = false;
-                var calResult = cal;
-                if (calResult < 0)
-                {
-                    //针对累计校验值外部统一处理，因为不同场景校验值初始值不同
-                    calResult = 0;
-                }
+                var calResult = GetCalResult(cal, 0);
+                var isBreak = IsBreak(qNode.TotalDistance, limitDistance);
 
-                if (qNode.TotalDistance >= limitDistance)
-                {
-                    //大于最小距离，直接跳出
-                    isBreak = true;
-                }
                 if (!isBreak && endStationName.Equals(qNode.Station.Name))
                 {
                     //达到终点，但未大于限定距离，继续扫描
@@ -210,10 +182,26 @@ namespace Trains.Domain
                 }
 
                 return new Tuple<bool, int>(isBreak, calResult);
-            };
+            }
 
             return BFS(startStationName, endStationName, validateFunction);
         }
+
+        /// <summary>
+        /// get statistic value
+        /// </summary>
+        /// <param name="initCalAmount">init value </param>
+        /// <param name="defaultValue">default value</param>
+        /// <returns></returns>
+        private int GetCalResult(int initCalAmount, int defaultValue) => initCalAmount < 0 ? defaultValue : initCalAmount;
+
+        /// <summary>
+        /// is break 
+        /// </summary>
+        /// <param name="compareValue">compare value</param>
+        /// <param name="limitValue">lmit value</param>
+        /// <returns></returns>
+        private bool IsBreak(int compareValue, int limitValue) => compareValue > limitValue;
 
         /// <summary>
         /// BFS
@@ -283,65 +271,84 @@ namespace Trains.Domain
             foreach (var lineInfo in routeInfoTrim.Split(",", StringSplitOptions.RemoveEmptyEntries))
             {
                 var lineArray = lineInfo.Trim().ToCharArray();
-                
+
                 var fromName = lineArray[0].ToString();
                 var toName = lineArray[1].ToString();
-                var fromStation = new Station() { Name = fromName };
-                var toStation = new Station() { Name = toName };
+
                 if (!int.TryParse(lineInfo.Replace(fromName, "").Replace(toName, ""), out int distance))
                 {
                     throw new BusinessException($"station distance of {fromName}-{toName} is illegal");
                 }
 
-                var thisStation = stationsMap.FirstOrDefault(state => state.Equals(fromStation));
-                var nextStation = stationsMap.FirstOrDefault(state => state.Equals(toStation));
+                var fromStation = AddToMap(fromName, stationsMap);
+                var toStation = AddToMap(toName, stationsMap);
 
-                //start station is not exist, then add
-                if (thisStation == null)
-                {
-                    thisStation = fromStation;
-                    stationsMap.Add(thisStation);
-                }
-
-                //to station is not exists, then add
-                if (nextStation == null)
-                {
-                    nextStation = toStation;
-                    stationsMap.Add(nextStation);
-                }
-
-                //initialize line between start station and next station
-                if (thisStation.Lines == null)
-                {
-                    thisStation.Lines = new List<Line>();
-                }
-                if (nextStation.Lines == null)
-                {
-                    nextStation.Lines = new List<Line>();
-                }
-
-                //check station route is exists
-                var existStation = thisStation.Lines.FirstOrDefault(node => node.Next.Equals(nextStation));
-                if (existStation != null)
-                {
-                    string errInfo = $"route：{thisStation.Name}{nextStation.Name}{existStation.Distance} had exists ";
-                    if (existStation.Distance == distance)
-                    {
-                        //repeated route will be ignore, only print log
-                        Console.WriteLine(errInfo);
-                    }
-                    else
-                    {
-                        //conflicting route will stop running
-                        throw new BusinessException($"{errInfo},且两次路径不一样{fromStation.Name}{toStation.Name}{distance}");
-                    }
-                }
-
-                //bind station and create line
-                thisStation.Lines.Add(new Line() { Next = nextStation, Distance = distance });
+                AddLine(fromStation, toStation, distance);
             }
 
             return stationsMap;
+        }
+
+        /// <summary>
+        /// add station to map
+        /// </summary>
+        /// <param name="stationName">staion name</param>
+        /// <param name="stationsMap">station map</param>
+        /// <returns></returns>
+        private Station AddToMap(string stationName, List<Station> stationsMap)
+        {
+            var thisStation = stationsMap.FirstOrDefault(state => state.Name.Equals(stationName));
+            if (thisStation == null)
+            {
+                thisStation = new Station() { Name = stationName, Lines = new List<Line>() };
+                stationsMap.Add(thisStation);
+            }
+
+            return thisStation;
+        }
+
+        /// <summary>
+        /// add line
+        /// </summary>
+        /// <param name="fromStation">from station </param>
+        /// <param name="toStation">to station </param>
+        /// <param name="distance">distance</param>
+        private void AddLine(Station fromStation, Station toStation, int distance)
+        {
+            //check station route is exists
+            if (CheckLine(fromStation, toStation, distance))
+            {
+                //bind station and create line
+                fromStation.Lines.Add(new Line() { Next = toStation, Distance = distance });
+            }
+        }
+
+        /// <summary>
+        /// check line 
+        /// </summary>
+        /// <param name="fromStation">from station </param>
+        /// <param name="toStation">to station </param>
+        /// <param name="distance">distance</param>
+        /// <returns>if line exists and conflict then return false else true</returns>
+        private bool CheckLine(Station fromStation, Station toStation, int distance)
+        {
+            var existStation = fromStation.Lines.FirstOrDefault(node => node.Next.Equals(toStation));
+            if (existStation != null)
+            {
+                string errInfo = $"route：{fromStation.Name}{toStation.Name}{existStation.Distance} had exists ";
+                if (existStation.Distance == distance)
+                {
+                    //repeated route will be ignore, only print log
+                    Console.WriteLine(errInfo);
+                }
+                else
+                {
+                    //conflicting route will stop running
+                    throw new BusinessException($"{errInfo},and the distance is not equals {fromStation.Name}{toStation.Name}{distance}");
+                }
+            }
+
+            return true;
         }
 
         /// <summary>
