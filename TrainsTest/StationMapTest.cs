@@ -65,6 +65,33 @@ namespace Tests
             Assert.That(excetion.Message, Is.EqualTo("NO SUCH ROUTE"));
         }
 
+
+        /// <summary>
+        /// Distance method test
+        /// </summary>
+        [Test]
+        public void ShouldCalcCorrectDuration()
+        {
+            var testRoute = new string[] { "A", "B", "C" };
+            var distance = stationMap.Duration(testRoute);
+            Assert.AreEqual(11, distance);
+
+            testRoute = new string[] { "A", "D" };
+            distance = stationMap.Duration(testRoute);
+            Assert.True(distance == 5);
+
+            testRoute = new string[] { "A", "D", "C" };
+            distance = stationMap.Duration(testRoute);
+            Assert.True(distance == 15);
+
+            testRoute = new string[] { "A", "E", "B", "C", "D" };
+            distance = stationMap.Duration(testRoute);
+            Assert.True(distance == 28);
+
+            testRoute = new string[] { "A", "E", "D" };
+            var excetion = Assert.Throws<BusinessException>(() => { stationMap.Distance(testRoute); });
+            Assert.That(excetion.Message, Is.EqualTo("NO SUCH ROUTE"));
+        }
         /// <summary>
         /// NumberOfTripsWithStopLimit method test
         /// </summary>
@@ -77,6 +104,20 @@ namespace Tests
             distance = stationMap.NumberOfTripsWithStopLimit("A", "C", 4, 4);
 
             Assert.True(distance == 3);
+        }
+
+        /* The number of trips starting at C and ending at C with a maximum duration of 30 minutes. 
+         * In the sample data below, there are four such trips:
+         * C©\D©\C (18), C©\E©\ B©\C (13), C©\D©\E©\B©\C (27) and C©\E©\B©\C©\E©\B©\C (28)*/
+
+       [Test]
+        public void DurationOfFastestRoute()
+        {
+            var distance = stationMap.DurationOfFastestRoute("A", "C");
+            Assert.AreEqual(11, distance);
+
+            distance = stationMap.DurationOfFastestRoute("B", "B");
+            Assert.AreEqual(13, distance);
         }
 
         /// <summary>

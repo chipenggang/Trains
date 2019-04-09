@@ -34,6 +34,10 @@ namespace Trains.Domain
         /// </summary>
         private const string ROUTE_INFO_PATTERN = @"^([a-zA-Z]{2}[0-9]+(,)*(\s)*)+$";
 
+        private const int TIME_OF_ONE_DISTANCE_MIN = 1;
+
+        private const int STOP_MIN = 2;
+
         /// <summary>
         /// the construction
         /// </summary>
@@ -79,6 +83,19 @@ namespace Trains.Domain
 
             return stationMap;
         }
+        /*A train travelling along any given route will stop in a station for two minutes.
+        Assuming one unit of distance travelled takes 1 minute, 
+        the 10 questions in Part 1 have been added to to include duration.*/
+
+        public int Duration(params string[] stations)
+        {
+            var distance = Distance(stations);
+            var stationCount = stations.Length - 2;
+
+            //A-B-C 
+
+            return distance * TIME_OF_ONE_DISTANCE_MIN + stationCount * STOP_MIN;
+        }
 
         /// <summary>
         /// get distance
@@ -105,6 +122,27 @@ namespace Trains.Domain
             return distance;
         }
 
+        public int DurationOfFastestRoute(string startStationName, string endStationName)
+        { 
+            Tuple<bool, int> validateFunction(QueueNode qNode, int cal)
+            {
+                var calResult = GetCalResult(cal, int.MaxValue);
+                var du = qNode.TotalDistance * TIME_OF_ONE_DISTANCE_MIN + Math.Max(qNode.Level - 1, 0) * STOP_MIN;
+                var isBreak = IsBreak(du, calResult);
+
+                if (!isBreak && endStationName.Equals(qNode.Station.Name))
+                {
+                    calResult = calResult > du ? du : calResult;
+                    isBreak = true;
+                }
+
+                return new Tuple<bool, int>(isBreak, calResult);
+            }
+
+            return BFS(startStationName, endStationName, validateFunction);
+            
+        }
+
         /// <summary>
         /// number of trips
         /// </summary>
@@ -122,7 +160,6 @@ namespace Trains.Domain
 
                 if (!isBreak && endStationName.Equals(qNode.Station.Name) && qNode.Level >= minDeep)
                 {
-                    //最小值交换
                     calResult++;
                 }
 
@@ -216,7 +253,7 @@ namespace Trains.Domain
             if (startStation == null)
             {
                 throw new BusinessException("NO SUCH ROUTE");
-            }
+            }      
 
             Queue<QueueNode> stationQueue = new Queue<QueueNode>();
             stationQueue.Enqueue(new QueueNode() { Level = 0, TotalDistance = 0, Station = startStation });
@@ -235,6 +272,7 @@ namespace Trains.Domain
                             TotalDistance = pop.TotalDistance + node.Distance,
                             Level = pop.Level + 1
                         };
+                        
 
                         var result = validateFunction(qNode, times);
 
